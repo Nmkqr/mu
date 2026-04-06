@@ -5,7 +5,7 @@ RUN apk add --no-cache ffmpeg
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci --only=production   # 👈 هذا يسبب المشكلة
+RUN npm install --omit=dev   # 👈 استخدم npm install بدل npm ci
 
 COPY . .
 
