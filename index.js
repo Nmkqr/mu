@@ -19,10 +19,7 @@ async function setupPlayer() {
   
   // 2. تسجيل YoutubeiExtractor فقط (هذا يكفي لكل شيء)
   await player.extractors.register(YoutubeiExtractor, {
-    // تحسين البحث
     searchLimit: 50,
-    // دعم المقاطع المحظورة عمرياً (اختياري)
-    cookie: process.env.YOUTUBE_COOKIE || undefined,
   });
   
   console.log('✅ تم تسجيل YoutubeiExtractor بنجاح');
@@ -102,10 +99,9 @@ client.on('interactionCreate', async (interaction) => {
     const query = interaction.options.getString('query');
 
     try {
-      // 🔥 استخدام search أولاً للتأكد من وجود نتائج
+      // 🔥 استخدام search أولاً للتأكد من وجود نتائج (تم حذف searchEngine)
       const searchResult = await player.search(query, {
-        requestedBy: interaction.user,
-        searchEngine: 'youtube'
+        requestedBy: interaction.user
       });
 
       if (!searchResult || !searchResult.tracks.length) {
@@ -119,7 +115,7 @@ client.on('interactionCreate', async (interaction) => {
           selfDeaf: true,
           volume: 80,
           leaveOnEmpty: true,
-          leaveOnEmptyCooldown:30000,
+          leaveOnEmptyCooldown: 30000,
           leaveOnEnd: false,
         }
       });
