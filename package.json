@@ -5,7 +5,8 @@
   "dependencies": {
     "discord.js": "^14.15.0",
     "discord-player": "^6.7.1",
-    "discord-player-youtubei": "^1.2.5",
+    "play-dl": "^1.9.7",
+    "@discord-player/extractor": "^4.5.0",
     "ffmpeg-static": "^5.2.0"
   }
 }
