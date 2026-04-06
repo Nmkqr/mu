@@ -22,7 +22,7 @@ player.events.on('playerError', (queue, error) => {
   queue.metadata.channel.send(`❌ خطأ: ${error.message}`);
 });
 
-// تسجيل الأوامر (مع إضافة الوصف لكل أمر)
+// تسجيل الأوامر
 async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
@@ -73,7 +73,7 @@ client.on('interactionCreate', async interaction => {
         title: video.title,
         author: video.channel?.name || 'Unknown',
         url: video.url,
-        duration: video.durationRaw,
+        duration: video.durationRaw || 'Live',
         thumbnail: video.thumbnails?.[0]?.url || '',
         requestedBy: interaction.user,
         async request() {
@@ -125,7 +125,7 @@ client.on('interactionCreate', async interaction => {
         .setThumbnail(track.thumbnail)
         .addFields(
           { name: 'الفنان', value: track.author, inline: true },
-          { name: 'المدة', value: track.duration, inline: true }
+          { name: 'المدة', value: track.duration || 'غير محدد', inline: true }
         );
       return interaction.reply({ embeds: [embed] });
     }
@@ -139,7 +139,8 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-client.once('ready', async () => {
+// ✅ استخدم clientReady بدلاً من ready
+client.once('clientReady', async () => {
   console.log(`🤖 ${client.user.tag} شغال`);
   await registerCommands();
   console.log('🎵 البوت جاهز للتشغيل');
