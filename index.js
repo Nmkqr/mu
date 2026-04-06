@@ -1,6 +1,5 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const { Player } = require('discord-player');
-const { YoutubeiExtractor } = require('discord-player-youtubei');
 
 const client = new Client({
   intents: [
@@ -14,8 +13,7 @@ const player = new Player(client);
 
 // تسجيل الـ extractors
 async function setupPlayer() {
-  await player.extractors.register(YoutubeiExtractor, {});
-  await player.extractors.loadDefault((ext) => ext !== 'YouTubeExtractor');
+  await player.extractors.loadDefault();
 }
 
 // أحداث المشغل
