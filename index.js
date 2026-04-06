@@ -2,6 +2,23 @@ const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuild
 const { Player } = require('discord-player');
 const playdl = require('play-dl');
 
+// ---------------------- إعدادات play-dl ----------------------
+// تعيين User-Agent لتجنب الحظر
+playdl.setToken({
+  useragent: [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
+  ]
+});
+
+// إذا وجد متغير البيئة YOUTUBE_COOKIE، استخدمه
+if (process.env.YOUTUBE_COOKIE) {
+  playdl.setCookie(process.env.YOUTUBE_COOKIE);
+  console.log('✅ تم تعيين كوكي YouTube');
+} else {
+  console.log('⚠️ لم يتم تعيين YOUTUBE_COOKIE، قد تواجه مشكلة "Sign in to confirm"');
+}
+
+// ---------------------- إعدادات Discord ----------------------
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -22,7 +39,7 @@ player.events.on('playerError', (queue, error) => {
   queue.metadata.channel.send(`❌ خطأ: ${error.message}`);
 });
 
-// تسجيل الأوامر
+// ---------------------- تسجيل الأوامر ----------------------
 async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
@@ -48,6 +65,7 @@ async function registerCommands() {
   console.log('✅ تم تسجيل الأوامر');
 }
 
+// ---------------------- معالجة الأوامر ----------------------
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName, guildId, member, channel } = interaction;
@@ -69,6 +87,8 @@ client.on('interactionCreate', async interaction => {
         video = search[0];
       }
 
+      const stream = await playdl.stream(video.url);
+      
       const customTrack = {
         title: video.title,
         author: video.channel?.name || 'Unknown',
@@ -77,7 +97,6 @@ client.on('interactionCreate', async interaction => {
         thumbnail: video.thumbnails?.[0]?.url || '',
         requestedBy: interaction.user,
         async request() {
-          const stream = await playdl.stream(video.url);
           return stream.stream;
         }
       };
@@ -94,7 +113,11 @@ client.on('interactionCreate', async interaction => {
       await interaction.editReply(`🎵 **تم التشغيل:** ${video.title}`);
     } catch (e) {
       console.error(e);
-      await interaction.editReply(`❌ خطأ: ${e.message}`);
+      let errorMsg = e.message;
+      if (errorMsg.includes('Sign in to confirm')) {
+        errorMsg = 'يوتيوب يطلب تأكيد أنك لست بوت. تأكد من إضافة YOUTUBE_COOKIE في متغيرات البيئة';
+      }
+      await interaction.editReply(`❌ خطأ: ${errorMsg}`);
     }
     return;
   }
@@ -139,7 +162,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ✅ استخدم clientReady بدلاً من ready
+// ---------------------- تشغيل البوت ----------------------
 client.once('clientReady', async () => {
   console.log(`🤖 ${client.user.tag} شغال`);
   await registerCommands();
