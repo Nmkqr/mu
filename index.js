@@ -1,6 +1,5 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const { Player } = require('discord-player');
-const { DefaultExtractors } = require('@discord-player/extractor');
 
 const client = new Client({
   intents: [
@@ -12,15 +11,11 @@ const client = new Client({
 
 const player = new Player(client);
 
-// 🔥 تسجيل extractors بشكل صحيح باستخدام DefaultExtractors
+// 🔥 تسجيل extractors بالطريقة الصحيحة
 async function setupPlayer() {
-  // إلغاء تسجيل كل الـ extractors القديمة
   await player.extractors.unregisterAll();
-  
-  // تسجيل الـ DefaultExtractors (YouTube, SoundCloud, Spotify, إلخ)
-  await player.extractors.register(DefaultExtractors, {});
-  
-  console.log('✅ تم تسجيل DefaultExtractors بنجاح');
+  await player.extractors.loadDefault();
+  console.log('✅ تم تسجيل extractors الافتراضية بنجاح');
 }
 
 // أحداث المشغل
@@ -97,7 +92,6 @@ client.on('interactionCreate', async (interaction) => {
     const query = interaction.options.getString('query');
 
     try {
-      // البحث عن الأغنية
       const searchResult = await player.search(query, {
         requestedBy: interaction.user
       });
@@ -106,7 +100,6 @@ client.on('interactionCreate', async (interaction) => {
         return interaction.editReply('❌ **ما لقيت نتائج لهذا البحث**\nجرب رابط YouTube مباشر أو اسم أغنية واضح');
       }
 
-      // تشغيل أول نتيجة
       const result = await player.play(voiceChannel, searchResult.tracks[0], {
         nodeOptions: {
           metadata: { channel, requestedBy: interaction.user },
@@ -127,7 +120,6 @@ client.on('interactionCreate', async (interaction) => {
     }
   }
 
-  // بقية الأوامر تحتاج player نشط
   const queue = player.nodes.get(guildId);
 
   if (commandName === 'skip') {
@@ -210,8 +202,17 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-client.once('ready', async () => {
+// استخدم clientReady بدلاً من ready (لتجنب التحذير)
+client.once('clientReady', async () => {
   console.log(`🤖 ${client.user.tag} شغال`);
+  await setupPlayer();
+  await registerCommands();
+  console.log('🎵 البوت جاهز للتشغيل');
+});
+
+// للتأكد من التوافق مع الإصدارات القديمة
+client.once('ready', async () => {
+  console.log(`🤖 ${client.user.tag} شغال (legacy event)`);
   await setupPlayer();
   await registerCommands();
   console.log('🎵 البوت جاهز للتشغيل');
