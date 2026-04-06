@@ -6,12 +6,3 @@ services:
     environment:
       - DISCORD_TOKEN=${DISCORD_TOKEN}
       - CLIENT_ID=${CLIENT_ID}
-    # Coolify يحتاج هذي أحياناً
-    networks:
-      - coolify
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-networks:
-  coolify:
-    external: true
