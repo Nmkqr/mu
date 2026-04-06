@@ -22,22 +22,25 @@ player.events.on('playerError', (queue, error) => {
   queue.metadata.channel.send(`❌ خطأ: ${error.message}`);
 });
 
-// تسجيل الأوامر
+// تسجيل الأوامر (مع إضافة الوصف لكل أمر)
 async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
       .setName('play')
-      .setDescription('شغّل أغنية')
+      .setDescription('شغّل أغنية من YouTube')
       .addStringOption(o => o.setName('query').setDescription('الرابط أو اسم الأغنية').setRequired(true)),
-    new SlashCommandBuilder().setName('skip').setDescription('تخطي'),
-    new SlashCommandBuilder().setName('stop').setDescription('إيقاف'),
-    new SlashCommandBuilder().setName('pause').setDescription('إيقاف مؤقت'),
-    new SlashCommandBuilder().setName('resume').setDescription('استئناف'),
-    new SlashCommandBuilder().setName('queue').setDescription('قائمة الانتظار'),
-    new SlashCommandBuilder().setName('nowplaying').setDescription('الأغنية الحالية'),
-    new SlashCommandBuilder().setName('volume').addIntegerOption(o => o.setName('level').setMinValue(0).setMaxValue(100).setRequired(true)),
-    new SlashCommandBuilder().setName('shuffle').setDescription('خلط'),
-    new SlashCommandBuilder().setName('loop').setDescription('تكرار'),
+    new SlashCommandBuilder().setName('skip').setDescription('تخطي الأغنية الحالية'),
+    new SlashCommandBuilder().setName('stop').setDescription('إيقاف الموسيقى والخروج من الروم'),
+    new SlashCommandBuilder().setName('pause').setDescription('إيقاف التشغيل مؤقتاً'),
+    new SlashCommandBuilder().setName('resume').setDescription('استئناف التشغيل'),
+    new SlashCommandBuilder().setName('queue').setDescription('عرض قائمة الانتظار'),
+    new SlashCommandBuilder().setName('nowplaying').setDescription('عرض الأغنية التي تشتغل حالياً'),
+    new SlashCommandBuilder()
+      .setName('volume')
+      .setDescription('تغيير مستوى الصوت (0-100)')
+      .addIntegerOption(o => o.setName('level').setDescription('مستوى الصوت').setMinValue(0).setMaxValue(100).setRequired(true)),
+    new SlashCommandBuilder().setName('shuffle').setDescription('خلط قائمة الانتظار عشوائياً'),
+    new SlashCommandBuilder().setName('loop').setDescription('تكرار الأغنية الحالية'),
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -51,7 +54,7 @@ client.on('interactionCreate', async interaction => {
   const voiceChannel = member.voice?.channel;
 
   if (commandName === 'play') {
-    if (!voiceChannel) return interaction.reply({ content: 'ادخل روم صوتي', ephemeral: true });
+    if (!voiceChannel) return interaction.reply({ content: '🔇 ادخل روم صوتي أول', ephemeral: true });
     await interaction.deferReply();
     const query = interaction.options.getString('query');
 
@@ -62,7 +65,7 @@ client.on('interactionCreate', async interaction => {
         video = info.video_details;
       } else {
         const search = await playdl.search(query, { limit: 1 });
-        if (!search.length) return interaction.editReply('❌ ما فيه نتائج');
+        if (!search.length) return interaction.editReply('❌ ما لقيت نتائج لهذا البحث');
         video = search[0];
       }
 
@@ -97,25 +100,42 @@ client.on('interactionCreate', async interaction => {
   }
 
   const queue = player.nodes.get(guildId);
-  if (!queue) return interaction.reply({ content: 'ما في شيء يشتغل', ephemeral: true });
+  if (!queue) return interaction.reply({ content: '❌ ما في شيء يشتغل حالياً', ephemeral: true });
 
   switch (commandName) {
     case 'skip': queue.node.skip(); return interaction.reply('⏭ تخطي');
     case 'stop': queue.delete(); return interaction.reply('⏹ إيقاف');
     case 'pause': queue.node.pause(); return interaction.reply('⏸ إيقاف مؤقت');
     case 'resume': queue.node.resume(); return interaction.reply('▶️ استئناف');
-    case 'volume': queue.node.setVolume(interaction.options.getInteger('level')); return interaction.reply(`🔊 الصوت ${interaction.options.getInteger('level')}%`);
-    case 'shuffle': queue.tracks.shuffle(); return interaction.reply('🔀 خلط');
-    case 'loop': queue.setRepeatMode(queue.repeatMode === 1 ? 0 : 1); return interaction.reply(queue.repeatMode === 1 ? '🔁 تكرار' : '➡️ إيقاف التكرار');
+    case 'volume':
+      const level = interaction.options.getInteger('level');
+      queue.node.setVolume(level);
+      return interaction.reply(`🔊 الصوت ${level}%`);
+    case 'shuffle': queue.tracks.shuffle(); return interaction.reply('🔀 خلط القائمة');
+    case 'loop':
+      const mode = queue.repeatMode === 1 ? 0 : 1;
+      queue.setRepeatMode(mode);
+      return interaction.reply(mode === 1 ? '🔁 تكرار الأغنية الحالية' : '➡️ إيقاف التكرار');
     case 'nowplaying': {
-      const t = queue.currentTrack;
-      const embed = new EmbedBuilder().setTitle(t.title).setURL(t.url).setThumbnail(t.thumbnail);
+      const track = queue.currentTrack;
+      const embed = new EmbedBuilder()
+        .setColor(0x1DB954)
+        .setTitle(track.title)
+        .setURL(track.url)
+        .setThumbnail(track.thumbnail)
+        .addFields(
+          { name: 'الفنان', value: track.author, inline: true },
+          { name: 'المدة', value: track.duration, inline: true }
+        );
       return interaction.reply({ embeds: [embed] });
     }
     case 'queue': {
-      const tracksList = queue.tracks.toArray().slice(0, 10).map((t, i) => `${i+1}. ${t.title}`).join('\n');
-      return interaction.reply(`📋 **قائمة الانتظار:**\n${tracksList || 'فاضية'}`);
+      const tracks = queue.tracks.toArray();
+      if (!tracks.length) return interaction.reply('📋 القائمة فاضية');
+      const list = tracks.slice(0, 10).map((t, i) => `${i+1}. ${t.title}`).join('\n');
+      return interaction.reply(`📋 **قائمة الانتظار:**\n${list}${tracks.length > 10 ? `\n...و ${tracks.length-10} أغاني أخرى` : ''}`);
     }
+    default: return interaction.reply('أمر غير معروف');
   }
 });
 
