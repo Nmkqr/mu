@@ -1,9 +1,12 @@
-docker-compose down
+FROM node:20-alpine
 
-docker system prune -a -f
+RUN apk add --no-cache ffmpeg
 
-docker-compose build --no-cache
+WORKDIR /app
 
-docker-compose up -d
+COPY package*.json ./
+RUN npm ci --only=production
 
-docker-compose logs -f
+COPY . .
+
+CMD ["node", "index.js"]
