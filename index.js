@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const { Player } = require('discord-player');
+const playdl = require('play-dl');
 
 const client = new Client({
   intents: [
@@ -11,35 +12,14 @@ const client = new Client({
 
 const player = new Player(client);
 
-// 🔥 تسجيل extractors بالطريقة الصحيحة
-async function setupPlayer() {
-  await player.extractors.unregisterAll();
-  await player.extractors.loadDefault();
-  console.log('✅ تم تسجيل extractors الافتراضية بنجاح');
-}
-
 // أحداث المشغل
 player.events.on('playerStart', (queue, track) => {
   queue.metadata.channel.send(`🎵 **يشتغل الآن:** ${track.title}\n👤 ${track.author}`);
 });
 
-player.events.on('audioTrackAdd', (queue, track) => {
-  if (queue.isPlaying()) {
-    queue.metadata.channel.send(`➕ **أضيف للقائمة:** ${track.title}`);
-  }
-});
-
-player.events.on('emptyQueue', (queue) => {
-  queue.metadata.channel.send('✅ **انتهت القائمة**');
-});
-
-player.events.on('emptyChannel', (queue) => {
-  queue.metadata.channel.send('👋 **ما في أحد في القناة، خرجت**');
-});
-
 player.events.on('playerError', (queue, error) => {
-  console.error('Player error:', error);
-  queue.metadata.channel.send('❌ **صار خطأ في التشغيل**\n`' + error.message + '`');
+  console.error(error);
+  queue.metadata.channel.send(`❌ خطأ: ${error.message}`);
 });
 
 // تسجيل الأوامر
@@ -47,28 +27,17 @@ async function registerCommands() {
   const commands = [
     new SlashCommandBuilder()
       .setName('play')
-      .setDescription('شغّل أغنية من YouTube')
-      .addStringOption(o =>
-        o.setName('query')
-          .setDescription('اسم الأغنية أو رابط YouTube')
-          .setRequired(true)),
-    new SlashCommandBuilder().setName('skip').setDescription('تخطي الأغنية الحالية'),
-    new SlashCommandBuilder().setName('stop').setDescription('إيقاف الموسيقى والخروج'),
+      .setDescription('شغّل أغنية')
+      .addStringOption(o => o.setName('query').setDescription('الرابط أو اسم الأغنية').setRequired(true)),
+    new SlashCommandBuilder().setName('skip').setDescription('تخطي'),
+    new SlashCommandBuilder().setName('stop').setDescription('إيقاف'),
     new SlashCommandBuilder().setName('pause').setDescription('إيقاف مؤقت'),
-    new SlashCommandBuilder().setName('resume').setDescription('استئناف التشغيل'),
-    new SlashCommandBuilder().setName('queue').setDescription('عرض قائمة الانتظار'),
-    new SlashCommandBuilder().setName('nowplaying').setDescription('ما يشتغل الآن'),
-    new SlashCommandBuilder()
-      .setName('volume')
-      .setDescription('تغيير الصوت')
-      .addIntegerOption(o =>
-        o.setName('level')
-          .setDescription('0-100')
-          .setRequired(true)
-          .setMinValue(0)
-          .setMaxValue(100)),
-    new SlashCommandBuilder().setName('shuffle').setDescription('خلط القائمة'),
-    new SlashCommandBuilder().setName('loop').setDescription('تكرار الأغنية الحالية'),
+    new SlashCommandBuilder().setName('resume').setDescription('استئناف'),
+    new SlashCommandBuilder().setName('queue').setDescription('قائمة الانتظار'),
+    new SlashCommandBuilder().setName('nowplaying').setDescription('الأغنية الحالية'),
+    new SlashCommandBuilder().setName('volume').addIntegerOption(o => o.setName('level').setMinValue(0).setMaxValue(100).setRequired(true)),
+    new SlashCommandBuilder().setName('shuffle').setDescription('خلط'),
+    new SlashCommandBuilder().setName('loop').setDescription('تكرار'),
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.DISCORD_TOKEN);
@@ -76,144 +45,82 @@ async function registerCommands() {
   console.log('✅ تم تسجيل الأوامر');
 }
 
-// معالجة الأوامر
-client.on('interactionCreate', async (interaction) => {
+client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
-
   const { commandName, guildId, member, channel } = interaction;
   const voiceChannel = member.voice?.channel;
 
   if (commandName === 'play') {
-    if (!voiceChannel) {
-      return interaction.reply({ content: '🔇 **ادخل قناة صوتية أول**', ephemeral: true });
-    }
-
+    if (!voiceChannel) return interaction.reply({ content: 'ادخل روم صوتي', ephemeral: true });
     await interaction.deferReply();
     const query = interaction.options.getString('query');
 
     try {
-      const searchResult = await player.search(query, {
-        requestedBy: interaction.user
-      });
-
-      if (!searchResult || !searchResult.tracks.length) {
-        return interaction.editReply('❌ **ما لقيت نتائج لهذا البحث**\nجرب رابط YouTube مباشر أو اسم أغنية واضح');
+      let video;
+      if (query.includes('youtube.com') || query.includes('youtu.be')) {
+        const info = await playdl.video_info(query);
+        video = info.video_details;
+      } else {
+        const search = await playdl.search(query, { limit: 1 });
+        if (!search.length) return interaction.editReply('❌ ما فيه نتائج');
+        video = search[0];
       }
 
-      const result = await player.play(voiceChannel, searchResult.tracks[0], {
+      const customTrack = {
+        title: video.title,
+        author: video.channel?.name || 'Unknown',
+        url: video.url,
+        duration: video.durationRaw,
+        thumbnail: video.thumbnails?.[0]?.url || '',
+        requestedBy: interaction.user,
+        async request() {
+          const stream = await playdl.stream(video.url);
+          return stream.stream;
+        }
+      };
+
+      await player.play(voiceChannel, customTrack, {
         nodeOptions: {
           metadata: { channel, requestedBy: interaction.user },
           selfDeaf: true,
           volume: 80,
           leaveOnEmpty: true,
-          leaveOnEmptyCooldown: 30000,
-          leaveOnEnd: false,
         }
       });
 
-      const track = result.track;
-      return interaction.editReply(`🎵 **تم التشغيل:** ${track.title}\n🔗 ${track.url || 'YouTube'}\n👤 طلب من: ${interaction.user.tag}`);
-      
+      await interaction.editReply(`🎵 **تم التشغيل:** ${video.title}`);
     } catch (e) {
-      console.error('Play command error:', e);
-      return interaction.editReply(`❌ **ما قدرت أشغل هذي الأغنية**\n\`${e.message}\``);
+      console.error(e);
+      await interaction.editReply(`❌ خطأ: ${e.message}`);
     }
+    return;
   }
 
   const queue = player.nodes.get(guildId);
+  if (!queue) return interaction.reply({ content: 'ما في شيء يشتغل', ephemeral: true });
 
-  if (commandName === 'skip') {
-    if (!queue?.isPlaying()) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    queue.node.skip();
-    return interaction.reply('⏭ **تم التخطي**');
-  }
-
-  if (commandName === 'stop') {
-    if (!queue) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    queue.delete();
-    return interaction.reply('⏹ **تم الإيقاف**');
-  }
-
-  if (commandName === 'pause') {
-    if (!queue?.isPlaying()) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    queue.node.pause();
-    return interaction.reply('⏸ **إيقاف مؤقت**');
-  }
-
-  if (commandName === 'resume') {
-    if (!queue) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    queue.node.resume();
-    return interaction.reply('▶️ **استئناف**');
-  }
-
-  if (commandName === 'volume') {
-    if (!queue) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    const level = interaction.options.getInteger('level');
-    queue.node.setVolume(level);
-    return interaction.reply(`🔊 **الصوت:** ${level}%`);
-  }
-
-  if (commandName === 'shuffle') {
-    if (!queue) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    queue.tracks.shuffle();
-    return interaction.reply('🔀 **تم خلط القائمة**');
-  }
-
-  if (commandName === 'loop') {
-    if (!queue) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    const mode = queue.repeatMode === 1 ? 0 : 1;
-    queue.setRepeatMode(mode);
-    return interaction.reply(mode === 1 ? '🔁 **تكرار الأغنية الحالية**' : '➡️ **إيقاف التكرار**');
-  }
-
-  if (commandName === 'nowplaying') {
-    if (!queue?.isPlaying()) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    const track = queue.currentTrack;
-    const embed = new EmbedBuilder()
-      .setColor(0x1DB954)
-      .setTitle('🎵 يشتغل الآن')
-      .setDescription(`**${track.title}**`)
-      .addFields(
-        { name: 'الفنان', value: track.author || 'غير معروف', inline: true },
-        { name: 'المدة', value: track.duration || 'غير معروف', inline: true },
-        { name: 'طلب من', value: track.requestedBy?.tag || queue.metadata.requestedBy?.tag || 'غير معروف', inline: true }
-      )
-      .setURL(track.url)
-      .setThumbnail(track.thumbnail);
-    return interaction.reply({ embeds: [embed] });
-  }
-
-  if (commandName === 'queue') {
-    if (!queue) return interaction.reply({ content: '❌ ما في شيء يشتغل', ephemeral: true });
-    const tracks = queue.tracks.toArray();
-    if (!tracks.length) return interaction.reply('📋 **القائمة فاضية**');
-    
-    let queueText = `**📋 قائمة الانتظار (${queue.tracks.size} أغاني)**\n\n`;
-    queueText += `🎵 **يشتغل الآن:** ${queue.currentTrack.title}\n\n`;
-    
-    const list = tracks.slice(0, 10).map((t, i) => `${i + 1}. **${t.title}**`).join('\n');
-    queueText += list;
-    
-    if (tracks.length > 10) {
-      queueText += `\n\n...و ${tracks.length - 10} أغاني ثانية`;
+  switch (commandName) {
+    case 'skip': queue.node.skip(); return interaction.reply('⏭ تخطي');
+    case 'stop': queue.delete(); return interaction.reply('⏹ إيقاف');
+    case 'pause': queue.node.pause(); return interaction.reply('⏸ إيقاف مؤقت');
+    case 'resume': queue.node.resume(); return interaction.reply('▶️ استئناف');
+    case 'volume': queue.node.setVolume(interaction.options.getInteger('level')); return interaction.reply(`🔊 الصوت ${interaction.options.getInteger('level')}%`);
+    case 'shuffle': queue.tracks.shuffle(); return interaction.reply('🔀 خلط');
+    case 'loop': queue.setRepeatMode(queue.repeatMode === 1 ? 0 : 1); return interaction.reply(queue.repeatMode === 1 ? '🔁 تكرار' : '➡️ إيقاف التكرار');
+    case 'nowplaying': {
+      const t = queue.currentTrack;
+      const embed = new EmbedBuilder().setTitle(t.title).setURL(t.url).setThumbnail(t.thumbnail);
+      return interaction.reply({ embeds: [embed] });
     }
-    
-    return interaction.reply(queueText);
+    case 'queue': {
+      const tracksList = queue.tracks.toArray().slice(0, 10).map((t, i) => `${i+1}. ${t.title}`).join('\n');
+      return interaction.reply(`📋 **قائمة الانتظار:**\n${tracksList || 'فاضية'}`);
+    }
   }
 });
 
-// استخدم clientReady بدلاً من ready (لتجنب التحذير)
-client.once('clientReady', async () => {
-  console.log(`🤖 ${client.user.tag} شغال`);
-  await setupPlayer();
-  await registerCommands();
-  console.log('🎵 البوت جاهز للتشغيل');
-});
-
-// للتأكد من التوافق مع الإصدارات القديمة
 client.once('ready', async () => {
-  console.log(`🤖 ${client.user.tag} شغال (legacy event)`);
-  await setupPlayer();
+  console.log(`🤖 ${client.user.tag} شغال`);
   await registerCommands();
   console.log('🎵 البوت جاهز للتشغيل');
 });
