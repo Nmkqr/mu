@@ -3,19 +3,26 @@ const { Player } = require('discord-player');
 const playdl = require('play-dl');
 
 // ---------------------- إعدادات play-dl ----------------------
-// تعيين User-Agent لتجنب الحظر
+// تعيين User-Agent فقط (بدون cookie لتجنب الخطأ)
 playdl.setToken({
   useragent: [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
   ]
 });
 
-// إذا وجد متغير البيئة YOUTUBE_COOKIE، استخدمه
+// إذا كان YOUTUBE_COOKIE موجوداً، جرب تعيينه بالطريقة الصحيحة (إذا كانت الدالة موجودة)
 if (process.env.YOUTUBE_COOKIE) {
-  playdl.setCookie(process.env.YOUTUBE_COOKIE);
-  console.log('✅ تم تعيين كوكي YouTube');
+  if (typeof playdl.setCookie === 'function') {
+    playdl.setCookie(process.env.YOUTUBE_COOKIE);
+    console.log('✅ تم تعيين كوكي YouTube');
+  } else if (typeof playdl.setCookies === 'function') {
+    playdl.setCookies(process.env.YOUTUBE_COOKIE);
+    console.log('✅ تم تعيين كوكي YouTube (setCookies)');
+  } else {
+    console.log('⚠️ لا يمكن تعيين الكوكي - دالة setCookie غير موجودة. قد تواجه مشكلة "Sign in to confirm"');
+  }
 } else {
-  console.log('⚠️ لم يتم تعيين YOUTUBE_COOKIE، قد تواجه مشكلة "Sign in to confirm"');
+  console.log('⚠️ لم يتم تعيين YOUTUBE_COOKIE');
 }
 
 // ---------------------- إعدادات Discord ----------------------
@@ -115,7 +122,7 @@ client.on('interactionCreate', async interaction => {
       console.error(e);
       let errorMsg = e.message;
       if (errorMsg.includes('Sign in to confirm')) {
-        errorMsg = 'يوتيوب يطلب تأكيد أنك لست بوت. تأكد من إضافة YOUTUBE_COOKIE في متغيرات البيئة';
+        errorMsg = 'يوتيوب يطلب تأكيد أنك لست بوت. حاول تحديث play-dl: npm install play-dl@latest';
       }
       await interaction.editReply(`❌ خطأ: ${errorMsg}`);
     }
