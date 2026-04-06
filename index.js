@@ -1,6 +1,6 @@
 const { Client, GatewayIntentBits, SlashCommandBuilder, REST, Routes, EmbedBuilder } = require('discord.js');
 const { Player } = require('discord-player');
-const { YoutubeiExtractor } = require('discord-player-youtubei');
+const { DefaultExtractors } = require('@discord-player/extractor');
 
 const client = new Client({
   intents: [
@@ -12,17 +12,15 @@ const client = new Client({
 
 const player = new Player(client);
 
-// 🔥 تسجيل extractors بشكل صحيح
+// 🔥 تسجيل extractors بشكل صحيح باستخدام DefaultExtractors
 async function setupPlayer() {
-  // 1. إلغاء تسجيل كل الـ extractors القديمة
+  // إلغاء تسجيل كل الـ extractors القديمة
   await player.extractors.unregisterAll();
   
-  // 2. تسجيل YoutubeiExtractor فقط (هذا يكفي لكل شيء)
-  await player.extractors.register(YoutubeiExtractor, {
-    searchLimit: 50,
-  });
+  // تسجيل الـ DefaultExtractors (YouTube, SoundCloud, Spotify, إلخ)
+  await player.extractors.register(DefaultExtractors, {});
   
-  console.log('✅ تم تسجيل YoutubeiExtractor بنجاح');
+  console.log('✅ تم تسجيل DefaultExtractors بنجاح');
 }
 
 // أحداث المشغل
@@ -99,7 +97,7 @@ client.on('interactionCreate', async (interaction) => {
     const query = interaction.options.getString('query');
 
     try {
-      // 🔥 استخدام search أولاً للتأكد من وجود نتائج (تم حذف searchEngine)
+      // البحث عن الأغنية
       const searchResult = await player.search(query, {
         requestedBy: interaction.user
       });
