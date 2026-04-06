@@ -1,16 +1,14 @@
-FROM node:20-alpine
+# إيقاف الحاوية القديمة
+docker-compose down
 
-RUN apk add --no-cache ffmpeg
+# حذف cache Docker
+docker system prune -a
 
-WORKDIR /app
+# إعادة البناء
+docker-compose build --no-cache
 
-# نسخ package.json أولاً للاستفادة من cache
-COPY package*.json ./
+# التشغيل
+docker-compose up -d
 
-# تنظيف cache و تثبيت
-RUN npm cache clean --force && \
-    npm install --omit=dev
-
-COPY . .
-
-CMD ["node", "index.js"]
+# مشاهدة اللوقز
+docker-compose logs -f
